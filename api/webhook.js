@@ -11,7 +11,7 @@ module.exports = async (req, res) => {
       return res.status(400).json({ error: '无效的webhook数据格式' });
     }
 
-    // 构建基础的Folo payload
+    // 构建最简化的Folo payload
     let foloPayload;
     if (webhookData.event === 'new_tweet') {
       const tweet = webhookData.data;
@@ -20,51 +20,16 @@ module.exports = async (req, res) => {
         publishedAt: tweet.tweet_created_at,
         title: tweet.full_text || tweet.text || 'New Tweet',
         content: tweet.full_text || tweet.text || '',
-        author: tweet.user?.name || 'Unknown',
-        url: tweet.user ? `https://twitter.com/${tweet.user.screen_name}/status/${tweet.id_str}` : null,
-        description: null,
-        language: tweet.lang || null,
-        authorUrl: tweet.user ? `https://twitter.com/${tweet.user.screen_name}` : null,
-        authorAvatar: tweet.user?.profile_image_url_https || null,
-        categories: null,
-        attachments: null,
-        extra: {  // 添加必需的extra字段
-          links: null
-        }
+        author: tweet.user?.name || 'Unknown'
       };
-
-      // 只有在有媒体内容时才添加media字段
-      if (tweet.extended_entities?.media) {
-        foloPayload.media = tweet.extended_entities.media.map(m => ({
-          url: m.media_url_https,
-          type: m.type === 'photo' ? 'photo' : 'video',
-          width: m.sizes?.large?.w || null,
-          height: m.sizes?.large?.h || null,
-          preview_image_url: m.type === 'video' ? m.media_url_https : null,
-          blurhash: null
-        }));
-      } else {
-        foloPayload.media = null;
-      }
     } else {
-      // 对于其他类型的事件，使用完整的格式
+      // 对于其他类型的事件，使用最简化的格式
       foloPayload = {
         guid: `${webhookData.event}_${Date.now()}`,
         publishedAt: new Date().toISOString(),
         title: `New ${webhookData.event}`,
         content: JSON.stringify(webhookData.data, null, 2),
-        author: webhookData.data.name || 'Unknown',
-        url: null,
-        description: null,
-        language: null,
-        authorUrl: null,
-        authorAvatar: null,
-        media: null,
-        categories: null,
-        attachments: null,
-        extra: {  // 添加必需的extra字段
-          links: null
-        }
+        author: webhookData.data.name || 'Unknown'
       };
     }
 
