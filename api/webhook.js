@@ -11,58 +11,37 @@ module.exports = async (req, res) => {
       return res.status(400).json({ error: '无效的webhook数据格式' });
     }
 
-    // 根据不同的事件类型处理数据
+    // 构建最简单的Folo payload
     let foloPayload;
-    switch (webhookData.event) {
-      case 'new_tweet':
-        const tweet = webhookData.data;
-        // 确保所有必需字段都有值
-        foloPayload = {
-          guid: tweet.id_str || String(Date.now()),  // 确保有唯一标识
-          publishedAt: tweet.tweet_created_at || new Date().toISOString(),
-          title: tweet.full_text || tweet.text || 'New Tweet',  // 确保有标题
-          content: tweet.full_text || tweet.text || '',  // 内容可以为空
-          author: tweet.user?.name || 'Unknown',
-          url: tweet.user ? 
-            `https://twitter.com/${tweet.user.screen_name}/status/${tweet.id_str}` : 
-            null,
-          // 只在有媒体内容时添加media字段
-          ...(tweet.extended_entities?.media ? {
-            media: tweet.extended_entities.media.map(m => ({
-              url: m.media_url_https,
-              type: m.type === 'photo' ? 'photo' : 'video'
-            }))
-          } : {})
-        };
-        break;
+    if (webhookData.event === 'new_tweet') {
+      const tweet = webhookData.data;
+      foloPayload = {
+        guid: tweet.id_str,
+        publishedAt: tweet.tweet_created_at,
+        title: tweet.full_text || tweet.text || 'New Tweet',
+        content: tweet.full_text || tweet.text || '',
+        author: tweet.user?.name || 'Unknown'
+      };
 
-      case 'profile_update':
-        const profile = webhookData.data;
-        foloPayload = {
-          guid: `profile_${profile.id_str}_${Date.now()}`,
-          publishedAt: new Date().toISOString(),
-          title: `Profile Update: ${profile.name || 'Unknown'}`,
-          content: profile.changes ? 
-            `Profile changes:\n${JSON.stringify(profile.changes, null, 2)}` : 
-            'Profile updated',
-          author: profile.name || 'Unknown'
-        };
-        break;
-
-      case 'new_following':
-        const user = webhookData.data;
-        foloPayload = {
-          guid: `following_${user.id_str}_${Date.now()}`,
-          publishedAt: new Date().toISOString(),
-          title: `New Following: ${user.name || 'Unknown'}`,
-          content: user.description || 'New following',
-          author: user.name || 'Unknown'
-        };
-        break;
-
-      default:
-        console.log('未知的事件类型:', webhookData.event);
-        return res.status(400).json({ error: '不支持的事件类型' });
+      // 只有在有媒体内容时才添加media字段
+      if (tweet.extended_entities?.media) {
+        const media = tweet.extended_entities.media.map(m => ({
+          url: m.media_url_https,
+          type: m.type === 'photo' ? 'photo' : 'video'
+        }));
+        if (media.length > 0) {
+          foloPayload.media = media;
+        }
+      }
+    } else {
+      // 对于其他类型的事件，使用最简单的格式
+      foloPayload = {
+        guid: `${webhookData.event}_${Date.now()}`,
+        publishedAt: new Date().toISOString(),
+        title: `New ${webhookData.event}`,
+        content: JSON.stringify(webhookData.data, null, 2),
+        author: webhookData.data.name || 'Unknown'
+      };
     }
 
     console.log('准备发送到Folo的数据:', JSON.stringify(foloPayload, null, 2));
