@@ -1,5 +1,4 @@
-const fetch = require('node-fetch');
-
+// api/webhook.js
 module.exports = async (req, res) => {
   if (req.method !== 'POST') {
     return res.status(405).json({ error: '只接受POST请求' });
@@ -21,14 +20,13 @@ module.exports = async (req, res) => {
         const tweet = webhookData.data;
         foloPayload = {
           guid: tweet.id_str,
-          publishedAt: tweet.tweet_created_at,  // 注意这里使用tweet_created_at
+          publishedAt: tweet.tweet_created_at,
           title: `Tweet from ${tweet.user.name}`,
-          content: tweet.full_text || tweet.text,  // 优先使用full_text
+          content: tweet.full_text || tweet.text,
           author: tweet.user.name,
           authorUrl: `https://twitter.com/${tweet.user.screen_name}`,
           authorAvatar: tweet.user.profile_image_url_https,
           url: `https://twitter.com/${tweet.user.screen_name}/status/${tweet.id_str}`,
-          // 处理媒体内容
           media: tweet.extended_entities?.media ? 
             tweet.extended_entities.media.map(m => ({
               url: m.media_url_https,
@@ -69,7 +67,7 @@ module.exports = async (req, res) => {
         return res.status(400).json({ error: '不支持的事件类型' });
     }
 
-    // 发送到Folo
+    // 发送到Folo（使用内置fetch）
     const foloResponse = await fetch('https://api.follow.is/inboxes/webhook', {
       method: 'POST',
       headers: {
