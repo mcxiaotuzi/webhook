@@ -1,4 +1,3 @@
-// api/webhook.js
 module.exports = async (req, res) => {
   if (req.method !== 'POST') {
     return res.status(405).json({ error: '只接受POST请求' });
@@ -8,7 +7,6 @@ module.exports = async (req, res) => {
     const webhookData = req.body;
     console.log('收到webhook数据:', JSON.stringify(webhookData, null, 2));
 
-    // 验证webhook数据格式
     if (!webhookData.event || !webhookData.data) {
       return res.status(400).json({ error: '无效的webhook数据格式' });
     }
@@ -18,21 +16,23 @@ module.exports = async (req, res) => {
     switch (webhookData.event) {
       case 'new_tweet':
         const tweet = webhookData.data;
+        // 确保所有必需字段都有值
         foloPayload = {
-          guid: tweet.id_str,
-          publishedAt: tweet.tweet_created_at,
-          title: `Tweet from ${tweet.user.name}`,
-          content: tweet.full_text || tweet.text,
-          author: tweet.user.name,
-          authorUrl: `https://twitter.com/${tweet.user.screen_name}`,
-          authorAvatar: tweet.user.profile_image_url_https,
-          url: `https://twitter.com/${tweet.user.screen_name}/status/${tweet.id_str}`,
-          media: tweet.extended_entities?.media ? 
-            tweet.extended_entities.media.map(m => ({
+          guid: tweet.id_str || String(Date.now()),  // 确保有唯一标识
+          publishedAt: tweet.tweet_created_at || new Date().toISOString(),
+          title: tweet.full_text || tweet.text || 'New Tweet',  // 确保有标题
+          content: tweet.full_text || tweet.text || '',  // 内容可以为空
+          author: tweet.user?.name || 'Unknown',
+          url: tweet.user ? 
+            `https://twitter.com/${tweet.user.screen_name}/status/${tweet.id_str}` : 
+            null,
+          // 只在有媒体内容时添加media字段
+          ...(tweet.extended_entities?.media ? {
+            media: tweet.extended_entities.media.map(m => ({
               url: m.media_url_https,
-              type: m.type === 'photo' ? 'photo' : 'video',
-              preview_image_url: m.type === 'video' ? m.media_url_https : undefined
-            })) : null
+              type: m.type === 'photo' ? 'photo' : 'video'
+            }))
+          } : {})
         };
         break;
 
@@ -41,11 +41,11 @@ module.exports = async (req, res) => {
         foloPayload = {
           guid: `profile_${profile.id_str}_${Date.now()}`,
           publishedAt: new Date().toISOString(),
-          title: `Profile Update: ${profile.name}`,
-          content: `Profile changes:\n${JSON.stringify(profile.changes, null, 2)}`,
-          author: profile.name,
-          authorUrl: `https://twitter.com/${profile.screen_name}`,
-          authorAvatar: profile.profile_image_url_https
+          title: `Profile Update: ${profile.name || 'Unknown'}`,
+          content: profile.changes ? 
+            `Profile changes:\n${JSON.stringify(profile.changes, null, 2)}` : 
+            'Profile updated',
+          author: profile.name || 'Unknown'
         };
         break;
 
@@ -54,11 +54,9 @@ module.exports = async (req, res) => {
         foloPayload = {
           guid: `following_${user.id_str}_${Date.now()}`,
           publishedAt: new Date().toISOString(),
-          title: `New Following: ${user.name}`,
-          content: user.description || '',
-          author: user.name,
-          authorUrl: `https://twitter.com/${user.screen_name}`,
-          authorAvatar: user.profile_image_url_https
+          title: `New Following: ${user.name || 'Unknown'}`,
+          content: user.description || 'New following',
+          author: user.name || 'Unknown'
         };
         break;
 
@@ -67,7 +65,9 @@ module.exports = async (req, res) => {
         return res.status(400).json({ error: '不支持的事件类型' });
     }
 
-    // 发送到Folo（使用内置fetch）
+    console.log('准备发送到Folo的数据:', JSON.stringify(foloPayload, null, 2));
+
+    // 发送到Folo
     const foloResponse = await fetch('https://api.follow.is/inboxes/webhook', {
       method: 'POST',
       headers: {
@@ -79,10 +79,11 @@ module.exports = async (req, res) => {
     });
 
     if (!foloResponse.ok) {
-      throw new Error(`Folo API错误: ${foloResponse.status}`);
+      const errorText = await foloResponse.text();
+      console.error('Folo响应错误:', errorText);
+      throw new Error(`Folo API错误: ${foloResponse.status} - ${errorText}`);
     }
 
-    // 返回成功状态
     res.status(200).json({ status: 'success' });
   } catch (error) {
     console.error('处理错误:', error);
